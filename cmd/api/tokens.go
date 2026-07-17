@@ -1,17 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
 
 	db "github.com/Hopertz/rent/db/sqlc"
+	"github.com/Hopertz/rent/pkg/mail"
 	"github.com/labstack/echo/v4"
 )
 
@@ -82,7 +79,7 @@ func (app *application) createAuthenticationTokenHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, envelope{"error": "internal server error"})
 	}
 
-	return c.JSON(http.StatusCreated, envelope{"token": token.Plaintext, "expiry": expiry.Unix(), "is_super_user" : admin.IsSuperUser})
+	return c.JSON(http.StatusCreated, envelope{"token": token.Plaintext, "expiry": expiry.Unix(), "is_super_user": admin.IsSuperUser})
 }
 
 func (app *application) createPasswordResetTokenHandler(c echo.Context) error {
@@ -126,44 +123,15 @@ func (app *application) createPasswordResetTokenHandler(c echo.Context) error {
 
 	app.background(func() {
 
-		dt := ResetData{
+		args := mail.MailerData{
 			Email: admin.Email,
+			Url:   app.config.frontend_url,
 			Token: token.Plaintext,
 		}
 
-		jsonData, err := json.Marshal(dt)
-		if err != nil {
-			slog.Error("Error marshaling JSON", "Error", err)
+		if err := app.mailer.SendMail("pwdreset_template", args); err != nil {
+			slog.Error("error sending welcome email to user", "error", err, "email", args.Email)
 		}
-
-		client := &http.Client{
-			Timeout: 10 * time.Second,
-		}
-
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s/resetpwd", app.config.mailer_url), bytes.NewBuffer(jsonData))
-		if err != nil {
-			slog.Error("Error creating request", "Error", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			slog.Error("Error sending request", "Error", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			slog.Error("Error reading response", "Error", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			slog.Error(fmt.Sprintf("Request failed with status code %d: %s", resp.StatusCode, string(respBody)))
-		}
-
-		slog.Info(fmt.Sprintf("Email sent successfully to %s\n", admin.Email))
-
 	})
 
 	return c.JSON(http.StatusOK, nil)
@@ -210,44 +178,15 @@ func (app *application) resendActivationTokenHandler(c echo.Context) error {
 
 	app.background(func() {
 
-		dt := ActivateData{
+		args := mail.MailerData{
 			Email: admin.Email,
 			Token: token.Plaintext,
+			Url:   app.config.frontend_url,
 		}
 
-		jsonData, err := json.Marshal(dt)
-		if err != nil {
-			slog.Error("Error marshaling JSON", "Error", err)
+		if err := app.mailer.SendMail("welcome_template", args); err != nil {
+			slog.Error("error sending welcome email to user", "error", err, "email", args.Email)
 		}
-
-		client := &http.Client{
-			Timeout: 10 * time.Second,
-		}
-
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s/activate", app.config.mailer_url), bytes.NewBuffer(jsonData))
-		if err != nil {
-			slog.Error("Error creating request", "Error", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			slog.Error("Error sending request", "Error", err)
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			slog.Error("Error reading response", "Error", err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			slog.Error(fmt.Sprintf("Request failed with status code %d: %s", resp.StatusCode, string(respBody)))
-		}
-
-		slog.Info(fmt.Sprintf("Email sent successfully to %s\n", admin.Email))
-
 	})
 
 	return c.JSON(http.StatusAccepted, nil)

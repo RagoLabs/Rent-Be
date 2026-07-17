@@ -13,6 +13,7 @@ import (
 	"time"
 
 	db "github.com/Hopertz/rent/db/sqlc"
+	"github.com/Hopertz/rent/pkg/mail"
 	_ "github.com/lib/pq"
 	"gopkg.in/go-playground/validator.v9"
 )
@@ -28,7 +29,7 @@ type config struct {
 		maxIdleConns int
 		maxIdleTime  string
 	}
-	mailer_url string
+    frontend_url string
 	emails     string
 }
 
@@ -39,6 +40,7 @@ type application struct {
 	wg        sync.WaitGroup
 	store     db.Store
 	validator *validator.Validate
+	mailer    *mail.Mailer
 }
 
 func init() {
@@ -52,6 +54,7 @@ func init() {
 
 func main() {
 	var cfg config
+	var ml mail.Mailer
 
 	flag.IntVar(&cfg.port, "port", 5040, "API server port")
 	flag.StringVar(&cfg.env, "env", os.Getenv("ENV_STAGE"), "Environment (development|Staging|production")
@@ -59,8 +62,16 @@ func main() {
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max ilde connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection  connections")
+
+	flag.StringVar(&cfg.frontend_url, "frontend-url", os.Getenv("FRONTEND_URL"), "frontend url ")
+	
 	flag.StringVar(&cfg.emails, "admin-emails", os.Getenv("ADMIN_EMAILS"), "admin emails ")
-	flag.StringVar(&cfg.mailer_url, "mail-url", os.Getenv("MAIL_URL"), "mail url ")
+
+	// mail configs 
+	flag.StringVar(&ml.Host, "MAIL HOST", os.Getenv("EMAIL_HOST"), "MAIL HOST")
+	flag.StringVar(&ml.Port, "MAIL PORT", os.Getenv("EMAIL_PORT"), "MAIL PORT")
+	flag.StringVar(&ml.User, "MAIL USER ", os.Getenv("EMAIL_USER"), "MAIL USER")
+	flag.StringVar(&ml.Pwd, "MAIL PASSWORD", os.Getenv("EMAIL_PASS"), "MAIL PWD")
 
 	flag.Parse()
 
